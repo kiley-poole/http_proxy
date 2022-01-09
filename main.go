@@ -2,51 +2,53 @@ package main
 
 import (
 	"syscall"
+	"time"
 )
 
 func main() {
 	serverAddr := syscall.SockaddrInet4{Port: 8085, Addr: [4]byte{127, 0, 0, 1}}
 	forwardAddr := syscall.SockaddrInet4{Port: 9000}
 
-	inboundSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
-	check(err, inboundSocket)
+	recvSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	check(err)
 
-	forwardSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
-	check(err, forwardSocket)
+	sendSocket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	check(err)
 
-	defer syscall.Close(forwardSocket)
-	defer syscall.Close(inboundSocket)
+	defer syscall.Close(sendSocket)
+	defer syscall.Close(recvSocket)
 
-	err = syscall.Bind(inboundSocket, &serverAddr)
-	check(err, inboundSocket)
+	err = syscall.Bind(recvSocket, &serverAddr)
+	check(err)
 
-	err = syscall.Listen(inboundSocket, syscall.SOMAXCONN)
-	check(err, inboundSocket)
+	err = syscall.Listen(recvSocket, syscall.SOMAXCONN)
+	check(err)
 
-	newSock, _, err := syscall.Accept(inboundSocket)
-	check(err, inboundSocket)
+	acceptSocket, _, err := syscall.Accept(recvSocket)
+	check(err)
+
+	err = syscall.Connect(sendSocket, &forwardAddr)
+	check(err)
 
 	res := make([]byte, 2048)
 
-	_, _, err = syscall.Recvfrom(newSock, res, 0)
-	check(err, newSock)
+	_, _, err = syscall.Recvfrom(acceptSocket, res, 0)
+	check(err)
 
-	err = syscall.Connect(forwardSocket, &forwardAddr)
-	check(err, forwardSocket)
+	err = syscall.Sendto(sendSocket, res, 0, &forwardAddr)
+	check(err)
 
-	err = syscall.Sendto(forwardSocket, res, 0, &forwardAddr)
-	check(err, forwardSocket)
+	time.Sleep(1 * time.Second)
 
-	_, _, err = syscall.Recvfrom(forwardSocket, res, 0)
-	check(err, newSock)
+	_, _, err = syscall.Recvfrom(sendSocket, res, 0)
+	check(err)
 
-	err = syscall.Sendto(newSock, res, 0, &forwardAddr)
-	check(err, forwardSocket)
+	err = syscall.Sendto(acceptSocket, res, 0, &forwardAddr)
+	check(err)
 }
 
-func check(err error, socket int) {
+func check(err error) {
 	if err != nil {
-		syscall.Close(socket)
 		panic(err)
 	}
 }
